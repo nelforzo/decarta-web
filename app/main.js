@@ -70,7 +70,10 @@
     dom.layout.setAttribute('aria-busy', 'false');
     dom.dropper.hidden = true;
     dom.openbutton.hidden = false;
-    U.setBanner(dom.banner, '');
+    U.setBanner(dom.banner, corpus.walMode
+      ? 'This corpus is a WAL-mode database: it was opened from the checkpointed image inside'
+        + ' the file, since a browser cannot create the sidecar a write-ahead log needs.'
+        + ' Run scripts/sync-resources.sh for a corpus that needs no such adjustment.' : '');
     // How long the viewer needed before the corpus was browsable, measured from the
     // navigation start — the number the selftest reports and the docs quote.
     D.loadMs = Math.round(performance.now());
@@ -84,6 +87,9 @@
     how.push(`SQLite runtime: ${D.flags.wasm} wasm`);
     how.push(D.flags.corpus.startsWith('file') ? 'corpus: opened from a local file you picked'
       : 'corpus: read from resources/corpus.db');
+    if (state.corpus && state.corpus.walMode) {
+      how.push('journal: file was WAL-flagged; read as its checkpointed image');
+    }
     dom.stats.title += `\n${how.join('\n')}`;
   }
 

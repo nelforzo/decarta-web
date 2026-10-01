@@ -282,6 +282,43 @@ async function main() {
     fs.writeFileSync(process.argv[shotIndex + 1], Buffer.from(shot.data, 'base64'));
     console.log(`screenshot -> ${process.argv[shotIndex + 1]}\n`);
   }
+  // A corpus picked from elsewhere may be a WAL-mode database — the shape the extractor
+  // leaves behind in ../decarta/build. The browser cannot open one from bytes (no sidecar),
+  // so the viewer clears the file-format WAL flag in its private copy; this proves that and
+  // that the corpus reads the same afterwards. The file's header is inspected on disk first,
+  // so the check cannot pass by being handed a rollback-journal file.
+  const walIndex = process.argv.indexOf('--wal');
+  // Absolute: DOM.setFileInputFiles hands the path to the browser process, which does not
+  // resolve it against this script's working directory.
+  const walPath = walIndex !== -1 ? path.resolve(process.argv[walIndex + 1] || '') : null;
+  if (walPath) {
+    if (!fs.existsSync(walPath)) {
+      check('the WAL corpus exists for the fallback check', false, walPath);
+    } else {
+      const onDisk = fs.readFileSync(walPath, { start: 0, end: 24 });
+      check('the corpus really is WAL-flagged on disk', onDisk[18] === 2 && onDisk[19] === 2,
+        `version bytes ${onDisk[18]}/${onDisk[19]}`);
+      const node = await cdp.send('DOM.getDocument');
+      const input = await cdp.send('DOM.querySelector', { nodeId: node.root.nodeId, selector: '#fileinput' });
+      // The picker is hidden once a corpus is loaded, and setFileInputFiles needs a
+      // rendered input, so the panel is revealed by hand first.
+      await evaluate(`(() => { document.getElementById('dropper').hidden = false; return true; })()`);
+      await cdp.send('DOM.setFileInputFiles', { nodeId: input.nodeId, files: [walPath] });
+      const swapped = await poll(
+        `(async () => { await Decarta.app.whenReady; const c = Decarta.app.state.corpus;
+           return { wal: c.walMode, articles: c.totals().articles, tokenizer: c.tokenizer }; })()`,
+        (value) => value && value.wal === true, 180000, 'the WAL corpus to open');
+      check('a WAL corpus opens anyway, with the fallback reported', swapped.wal === true,
+        `${swapped.articles} articles`);
+      check('the WAL corpus reads whole', swapped.articles === 39491, String(swapped.articles));
+      const walSearch = await evaluate(`(() => { Decarta.app.runSearch('自由の女神');
+         return { total: Decarta.app.state.matchTotal,
+           banner: document.getElementById('banner').hidden ? '' : document.getElementById('banner').textContent.slice(0, 40) }; })()`);
+      check('search works on the WAL corpus', walSearch.total === 8,
+        `${walSearch.total} hits · banner “${walSearch.banner}…”`);
+    }
+  }
+
   check('no console errors or uncaught exceptions', problems.length === 0, problems.slice(0, 2).join(' | '));
 
   report(checks, problems);

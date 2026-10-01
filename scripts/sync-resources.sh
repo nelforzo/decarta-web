@@ -28,7 +28,13 @@ if [ "$LINK" = 1 ] && [ "$(sqlite3 "$CORPUS" 'pragma journal_mode')" = "delete" 
     ln -s "$(cd "$(dirname "$CORPUS")" && pwd)/$(basename "$CORPUS")" "$DST/corpus.db"
     echo "linked corpus.db -> $CORPUS"
 else
-    echo "writing resources/corpus.db (rollback-journal copy of $(du -h "$CORPUS" | cut -f1) source)…"
+    # A WAL corpus is rewritten rather than linked (or copied): the browser opens the
+    # corpus from its bytes, and a write-ahead log needs a -shm sidecar it cannot create,
+    # so the viewer would have to fall back to clearing the WAL flag in its copy. VACUUM
+    # INTO gives it a rollback-journal file that opens as-is, the same shape the native
+    # app bundles.
+    MODE=$(sqlite3 "$CORPUS" 'pragma journal_mode')
+    echo "writing resources/corpus.db (rollback-journal copy of a $MODE $(du -h "$CORPUS" | cut -f1) source)…"
     sqlite3 "$CORPUS" "VACUUM INTO '$DST/corpus.db'"
 fi
 

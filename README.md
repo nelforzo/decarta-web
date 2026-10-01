@@ -61,10 +61,15 @@ there is no network code in the viewer.
   only reason the code is written against a `Decarta` global and has no build step.
 - **The corpus is fed to SQLite as bytes.** `sqlite3_deserialize()` opens the file the
   browser hands us, in memory, read-only. The 345 MB is streamed into the WASM heap in
-  8 MB slices so it is never held twice. A WAL-mode corpus cannot be opened this way at
-  all (`SQLITE_CANTOPEN` — it wants `-shm` sidecars it has no way to create), which is why
-  `sync-resources.sh` writes the corpus in rollback-journal mode with `VACUUM INTO`,
-  exactly as the native app bundles it. The error message says so if you hit it.
+  8 MB slices so it is never held twice. A WAL-mode corpus cannot be opened that way — the
+  first query fails with `SQLITE_CANTOPEN` (14) because a write-ahead log needs a `-shm`
+  sidecar a browser cannot create — so the viewer clears the file-format WAL flag (header
+  bytes 18/19) in its *private copy* before opening it, and says so in the banner. That
+  makes a corpus picked straight out of `../decarta/build` usable, with one caveat: the
+  `-wal` file itself is never visible to the browser, so a corpus with un-checkpointed
+  transactions would be read as of its last checkpoint. `sync-resources.sh` writes a
+  rollback-journal copy with `VACUUM INTO` (as the native app bundles) and needs no such
+  adjustment.
 - **Search is the same query path as the CLI.** The query is tried as typed and only
   re-tried NFKC-normalized if it found nothing; `trigram` corpora take FTS5 `MATCH` of
   quoted phrases ranked by bm25 (title 8.0 / reading 4.0 / body 1.0) when every term is
@@ -94,6 +99,7 @@ resources/               corpus.db + media/ — git-ignored, see below
 ```sh
 node scripts/selftest.cjs                      # fetch path (--allow-file-access-from-files)
 node scripts/selftest.cjs --fallback           # the file-picker path
+node scripts/selftest.cjs --wal ../decarta/build/corpus.db   # a WAL corpus picked from elsewhere
 node scripts/selftest.cjs --screenshot out.png
 ```
 
@@ -103,7 +109,10 @@ reporting parity with the CLI. Measured on the real corpus: 23 checks green, cor
 browsable **0.6 s** after navigation, 345 MB opened out of `resources/`, `自由の女神`
 → the same 8 hits and the same top hit (`自由の女神像`) as `make query`, `ＦＵＪＩ` → 5
 after NFKC retry, `火山` → the `LIKE` path with no invented total, 富士山's 4 pictures
-decoded from `resources/media/`, cross-reference navigation and back.
+decoded from `resources/media/`, cross-reference navigation and back. The `--wal` mode
+additionally opens a WAL-flagged corpus (checked on disk first, so the pass cannot come
+from being handed an ordinary file) and reads the same 39,491 articles through the
+header fallback.
 
 ## Legal / provenance
 

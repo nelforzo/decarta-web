@@ -148,24 +148,35 @@
    * it when the database closes; RESIZEABLE keeps the file writable in-memory, which the
    * compiled-in WAL/rollback machinery expects.
    *
-   * A WAL-mode corpus cannot be opened this way — it wants -shm sidecars it has no way to
-   * create — and reports SQLITE_CANTOPEN; scripts/sync-resources.sh writes the corpus in
-   * rollback-journal mode for exactly this reason, and the error below says so. */
+   * A WAL-mode corpus cannot be opened this way at all — it wants the -shm sidecar it has
+   * no way to create, and every query comes back SQLITE_CANTOPEN (14) even though this
+   * call itself returns 0. Measured on this corpus: the first `SELECT COUNT(*)` is what
+   * fails, which is why the header is inspected and adjusted *before* deserializing
+   * below rather than after. */
   D.openPointer = function openPointer(sqlite3, pointer, size) {
     const capi = sqlite3.capi;
     const db = new sqlite3.oo1.DB();
+    const wal = prepareHeader(sqlite3, pointer, size);
     const flags = (capi.SQLITE_DESERIALIZE_FREEONCLOSE || 1) | (capi.SQLITE_DESERIALIZE_RESIZEABLE || 2);
     const rc = capi.sqlite3_deserialize(db.pointer, 'main', pointer, size, size, flags);
     if (rc !== 0) {
       try { db.close(); } catch (ignore) { /* already unusable */ }
-      const name = (capi.sqlite3_js_rc_str && capi.sqlite3_js_rc_str(rc)) || rc;
-      throw new Error(rc === 14
-        ? `${name} — a WAL-mode corpus cannot be opened from bytes; re-run scripts/sync-resources.sh`
-        : `${name} — the database could not be opened`);
+      throw new Error(`${rcName(capi, rc)} — the database could not be opened${rc === 14
+        ? '; if it is a WAL-mode corpus, scripts/sync-resources.sh writes a copy that opens'
+          + ' from bytes (a WAL database needs sidecars a browser cannot create)'
+        : ''}`);
     }
     db.exec('PRAGMA query_only = 1');
-    const meta = {};
-    for (const row of db.selectObjects('SELECT key, value FROM meta')) meta[row.key] = row.value;
+    let meta;
+    try {
+      meta = {};
+      for (const row of db.selectObjects('SELECT key, value FROM meta')) meta[row.key] = row.value;
+    } catch (error) {
+      db.close();
+      // The WAL failure lands here, not on the deserialize call above.
+      throw new Error(`${error.message}${wal ? ' — this corpus is flagged WAL in its header' : ''}`
+        + '; re-run scripts/sync-resources.sh to write a rollback-journal copy of the corpus');
+    }
     const version = meta.schema_version;
     if (version !== D.SCHEMA_VERSION) {
       db.close();
@@ -175,8 +186,39 @@
       db.close();
       throw new Error(`corpus was built with an unknown tokenizer (${meta.tokenizer})`);
     }
-    return new Corpus(sqlite3, db, meta);
+    const corpus = new Corpus(sqlite3, db, meta);
+    corpus.walMode = wal;
+    return corpus;
   };
+
+  /* Read the journal mode out of the database header and, in the in-memory copy only,
+   * clear the WAL flag.
+   *
+   * Bytes 18 and 19 of page 1 are the file format's write and read versions: 2 means
+   * "this file is meant to be read through a -write-ahead log", 1 means an ordinary
+   * rollback-journal database. A WAL database whose log has been fully checkpointed is a
+   * perfectly ordinary database that happens to carry that flag, so clearing the two
+   * bytes lets SQLite open the bytes we hold.
+   *
+   * What this cannot see is the -wal sidecar itself: a corpus with un-checkpointed
+   * transactions in its log would open, minus those transactions. The browser is never
+   * shown that file, so the caller is told the corpus was opened this way rather than
+   * being left to wonder — and `sync-resources.sh` writes files with the flag already
+   * clear, so this path only ever runs for a corpus picked from elsewhere.
+   *
+   * Nothing on disk is touched: the bytes are already a private copy in the WASM heap. */
+  function prepareHeader(sqlite3, pointer, size) {
+    if (size < 100) return false;
+    const heap = sqlite3.wasm.heap8u();
+    if (heap[pointer + 18] !== 2 && heap[pointer + 19] !== 2) return false;
+    heap[pointer + 18] = 1;
+    heap[pointer + 19] = 1;
+    return true;
+  }
+
+  function rcName(capi, rc) {
+    return (capi.sqlite3_js_rc_str && capi.sqlite3_js_rc_str(rc)) || `sqlite3 result code ${rc}`;
+  }
 
   D.openBytes = function openBytes(sqlite3, bytes) {
     const pointer = sqlite3.wasm.allocFromTypedArray(bytes);
@@ -217,6 +259,9 @@
       this.meta = meta;
       this.tokenizer = meta.tokenizer;
       this.closed = false;
+      /* True when the file we opened was flagged WAL and the viewer cleared that flag in
+       * its private copy to read it (see prepareHeader); surfaced in the UI. */
+      this.walMode = false;
     }
 
     get schemaVersion() { return this.meta.schema_version; }
