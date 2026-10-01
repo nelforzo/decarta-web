@@ -1,0 +1,8 @@
+# Content is never committed: the ISO, the extracted corpus and the media tree
+# are local, copyrighted, and git-ignored by policy (same rule as ../decarta).
+resources/
+build/
+.scratch/
+node_modules/
+vendor/*.wasm.map
+.DS_Store
