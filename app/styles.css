@@ -259,7 +259,11 @@ button { font: inherit; color: inherit; }
   padding: 24px;
   background: rgba(20, 20, 22, .55);
 }
+/* An author `display: grid` beats the UA stylesheet's `[hidden] { display: none }`, which
+ * would leave this overlay covering every click while the attribute said it was hidden. */
+.dropper[hidden] { display: none; }
 .dropper .card {
+  position: relative;
   max-width: 40em;
   padding: 22px 26px;
   background: var(--pane);
@@ -267,6 +271,20 @@ button { font: inherit; color: inherit; }
   border-radius: 10px;
   box-shadow: 0 12px 40px rgba(0, 0, 0, .25);
 }
+.dropclose {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  padding: 2px 8px;
+  font-size: 16px;
+  line-height: 1.2;
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.dropclose:hover { background: var(--bg); color: var(--ink); }
 .dropper h2 { margin: 0 0 10px; font-size: 17px; }
 .dropper p { margin: 0 0 10px; font-size: 13px; color: var(--muted); }
 .dropper ul { margin: 0 0 10px; padding-left: 20px; font-size: 13px; color: var(--muted); }

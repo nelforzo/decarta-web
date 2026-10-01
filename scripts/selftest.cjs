@@ -259,15 +259,33 @@ async function main() {
     navigation.after !== navigation.before && navigation.back === navigation.before,
     `${navigation.before} -> ${navigation.after} -> ${navigation.back}`);
 
-  const layout = await evaluate(`(() => ({
-     overflow: document.documentElement.scrollWidth - window.innerWidth,
-     panes: [...document.querySelectorAll('#sidebar, #listpane, #reader')].map((p) => Math.round(p.getBoundingClientRect().width)),
-     searchEnabled: !document.getElementById('search').disabled,
-     stylesheets: document.styleSheets.length,
-     rowFont: getComputedStyle(document.querySelector('.rowtitle') || document.body).fontSize,
-     bodyLine: getComputedStyle(document.querySelector('.articlebody p') || document.body).lineHeight,
-     loadMs: Decarta.loadMs,
-     summary: document.getElementById('listsummary').textContent }))()`);
+  const layout = await evaluate(`(() => {
+     const dropper = document.getElementById('dropper');
+     const list = document.getElementById('listpane');
+     list.scrollTop = 0;   // an earlier check scrolled the list; hit-test something on screen
+     const row = document.querySelector('.row');
+     const rowBox = row.getBoundingClientRect();
+     const at = (x, y) => document.elementFromPoint(x, y);
+     const rowHit = at(rowBox.left + 8, rowBox.top + rowBox.height / 2);
+     const searchBox = document.getElementById('search').getBoundingClientRect();
+     const searchHit = at(searchBox.left + 8, searchBox.top + searchBox.height / 2);
+     return {
+       overflow: document.documentElement.scrollWidth - window.innerWidth,
+       panes: [...document.querySelectorAll('#sidebar, #listpane, #reader')].map((p) => Math.round(p.getBoundingClientRect().width)),
+       searchEnabled: !document.getElementById('search').disabled,
+       stylesheets: document.styleSheets.length,
+       rowFont: getComputedStyle(document.querySelector('.rowtitle') || document.body).fontSize,
+       bodyLine: getComputedStyle(document.querySelector('.articlebody p') || document.body).lineHeight,
+       loadMs: Decarta.loadMs,
+       // The attribute says "hidden"; what matters is whether the overlay is still drawn
+       // over the app and swallowing clicks.
+       panelHidden: dropper.hidden,
+       panelDisplay: getComputedStyle(dropper).display,
+       panelCovers: !!(at(window.innerWidth / 2, window.innerHeight / 2) || {}).closest?.('#dropper'),
+       rowClickable: row.contains(rowHit),
+       searchClickable: document.getElementById('search').contains(searchHit),
+       summary: document.getElementById('listsummary').textContent };
+   })()`);
   check('three panes are laid out side by side', layout.panes.every((w) => w > 100), layout.panes.join(' / '));
   check('no horizontal overflow', layout.overflow <= 0, `overflow ${layout.overflow}px`);
   check('the stylesheet is applied', layout.stylesheets >= 1 && layout.rowFont === '14px',
@@ -275,6 +293,21 @@ async function main() {
   check('search box is live once the corpus is open', layout.searchEnabled, layout.summary);
   check('corpus was browsable within 30 s', layout.loadMs > 0 && layout.loadMs < 30000,
     `${(layout.loadMs / 1000).toFixed(1)} s from navigation start`);
+  check('the open panel is gone, not just marked hidden', layout.panelDisplay === 'none' && !layout.panelCovers,
+    `display ${layout.panelDisplay}`);
+  check('entries and the search box receive clicks', layout.rowClickable && layout.searchClickable,
+    `row ${layout.rowClickable}, search ${layout.searchClickable}`);
+
+  // The panel is dismissible once a corpus is open, so opening it by hand is not a trap.
+  const dismissed = await evaluate(`(async () => {
+     document.getElementById('openbutton').click();
+     const opened = getComputedStyle(document.getElementById('dropper')).display;
+     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+     await new Promise((r) => setTimeout(r, 50));
+     return { opened, closed: getComputedStyle(document.getElementById('dropper')).display };
+   })()`, true);
+  check('the open panel can be dismissed again', dismissed.opened !== 'none' && dismissed.closed === 'none',
+    `${dismissed.opened} -> ${dismissed.closed}`);
 
   const shotIndex = process.argv.indexOf('--screenshot');
   if (shotIndex !== -1 && process.argv[shotIndex + 1]) {

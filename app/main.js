@@ -27,6 +27,7 @@
     article: document.getElementById('article'),
     dropper: document.getElementById('dropper'),
     dropmessage: document.getElementById('dropmessage'),
+    dropclose: document.getElementById('dropclose'),
     fileinput: document.getElementById('fileinput'),
   };
 
@@ -95,12 +96,20 @@
 
   function showOpenPanel(message) {
     dom.dropper.hidden = false;
+    // Only offer a way out when there is already a corpus to go back to; before that the
+    // panel is the only way forward.
+    dom.dropclose.hidden = !state.corpus;
     U.clear(dom.dropmessage);
     const lines = String(message).split('\n');
     for (const line of lines) {
       dom.dropmessage.append(U.el('p', { text: line }));
     }
     dom.layout.setAttribute('aria-busy', 'false');
+  }
+
+  function hideOpenPanel() {
+    if (!state.corpus) return;
+    dom.dropper.hidden = true;
   }
 
   async function openFromResources() {
@@ -236,6 +245,11 @@
 
   dom.fileinput.addEventListener('change', () => openFromFile(dom.fileinput.files[0]));
   dom.openbutton.addEventListener('click', () => showOpenPanel('Pick resources/corpus.db, or drop it anywhere on this window.'));
+  dom.dropclose.addEventListener('click', hideOpenPanel);
+  // Clicking the backdrop (but not the card) dismisses it too, once a corpus is open.
+  dom.dropper.addEventListener('click', (event) => {
+    if (event.target === dom.dropper) hideOpenPanel();
+  });
 
   for (const type of ['dragenter', 'dragover']) {
     window.addEventListener(type, (event) => {
@@ -255,6 +269,11 @@
       event.preventDefault();
       dom.search.focus();
       dom.search.select();
+      return;
+    }
+    if (event.key === 'Escape' && !dom.dropper.hidden) {
+      event.preventDefault();
+      hideOpenPanel();
       return;
     }
     if (event.key === 'Escape' && document.activeElement === dom.search) {

@@ -46,7 +46,8 @@ Chrome/Edge/Brave with `--allow-file-access-from-files` (in its own profile, so 
 already-running browser actually applies the flag) to make the corpus load by itself —
 the offline behaviour this project exists for. Safari and Firefox have no such switch;
 there the picker is the path. Either way nothing is uploaded, nothing is installed and
-there is no network code in the viewer.
+there is no network code in the viewer, and the panel closes with its ×, the backdrop, or
+Esc once a corpus is open.
 
 ## How the reader works
 
