@@ -1,0 +1,3 @@
+# Keep the vendored SQLite runtime out of the language statistics — it is a third-party
+# build, not source we maintain (see scripts/vendor-sqlite.sh).
+vendor/* linguist-vendored

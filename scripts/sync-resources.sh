@@ -3,8 +3,14 @@
 #
 #   scripts/sync-resources.sh [--link] [<decarta-checkout>]
 #
-# Default copies (so the folder can be moved to another machine / USB stick);
-# --link symlinks instead, which is what you want while iterating locally.
+# Default copies, so the folder can be carried to another machine; --link symlinks,
+# which is what you want while iterating locally.
+#
+# The corpus is re-written with VACUUM INTO rather than copied when it is in WAL mode:
+# the browser opens the bytes it is handed through sqlite3_deserialize(), and a WAL-mode
+# database cannot be opened from a byte array at all (SQLITE_CANTOPEN — it needs the
+# -shm sidecar it has no way to create). VACUUM INTO produces the same corpus in
+# rollback-journal mode, which is what the native app bundles for the same reason.
 set -eu
 
 LINK=0
@@ -15,19 +21,28 @@ CORPUS="$SRC/build/corpus.db"
 MEDIA="$SRC/build/media"
 
 [ -f "$CORPUS" ] || { echo "no corpus at $CORPUS — run 'make ingest-disc' in $SRC first" >&2; exit 1; }
-
 mkdir -p "$DST"
-if [ "$LINK" = 1 ]; then
-    rm -f "$DST/corpus.db"; ln -s "$(cd "$(dirname "$CORPUS")" && pwd)/$(basename "$CORPUS")" "$DST/corpus.db"
-    [ -d "$MEDIA" ] && { rm -f "$DST/media"; ln -s "$(cd "$MEDIA" && pwd)" "$DST/media"; }
+rm -f "$DST/corpus.db"
+
+if [ "$LINK" = 1 ] && [ "$(sqlite3 "$CORPUS" 'pragma journal_mode')" = "delete" ]; then
+    ln -s "$(cd "$(dirname "$CORPUS")" && pwd)/$(basename "$CORPUS")" "$DST/corpus.db"
+    echo "linked corpus.db -> $CORPUS"
 else
-    echo "copying corpus.db ($(du -h "$CORPUS" | cut -f1))…"
-    cp "$CORPUS" "$DST/corpus.db"
-    if [ -d "$MEDIA" ]; then
+    echo "writing resources/corpus.db (rollback-journal copy of $(du -h "$CORPUS" | cut -f1) source)…"
+    sqlite3 "$CORPUS" "VACUUM INTO '$DST/corpus.db'"
+fi
+
+if [ -d "$MEDIA" ]; then
+    rm -rf "$DST/media"
+    if [ "$LINK" = 1 ]; then
+        ln -s "$(cd "$MEDIA" && pwd)" "$DST/media"
+        echo "linked media/ -> $MEDIA"
+    else
         echo "copying media ($(du -sh "$MEDIA" | cut -f1))…"
-        rm -rf "$DST/media"
         cp -R "$MEDIA" "$DST/media"
     fi
 fi
+
+echo
 echo "resources ready:"
 ls -la "$DST"

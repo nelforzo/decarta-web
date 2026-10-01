@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>decarta</title>
+<!--
+  Plain classic scripts on purpose: a file:// page cannot load ES modules in Chrome or
+  Firefox (module scripts are subject to CORS, and file:// has no origin to satisfy it),
+  and this viewer is meant to be opened straight off the filesystem with no server.
+-->
+<link rel="stylesheet" href="app/styles.css">
+</head>
+<body>
+
+<header id="topbar">
+  <div class="brand">
+    <span class="mark">de<span>carta</span></span>
+    <span class="tag">Encarta 2003 · 日本語</span>
+  </div>
+  <div class="searchwrap">
+    <input id="search" type="search" autocomplete="off" spellcheck="false"
+           placeholder="Search titles, readings and text…  ( / )" disabled>
+    <span id="searchstate" class="searchstate"></span>
+  </div>
+  <div class="corpus">
+    <span id="stats" class="stats">loading…</span>
+    <button id="openbutton" type="button" class="ghost" hidden>Open corpus.db…</button>
+  </div>
+</header>
+
+<div id="banner" class="banner" hidden></div>
+
+<main id="layout" aria-busy="true">
+  <nav id="sidebar" aria-label="五十音">
+    <h2>Browse</h2>
+    <ul id="categories"></ul>
+  </nav>
+
+  <section id="listpane" aria-label="Entries">
+    <div id="listsummary" class="listsummary">—</div>
+    <div id="entries" class="entries"></div>
+    <div id="listfoot" class="listfoot"></div>
+  </section>
+
+  <article id="reader" aria-label="Article">
+    <div id="readerbar" class="readerbar" hidden>
+      <button id="back" type="button" class="ghost" title="⌘[ or Alt+←">← Back</button>
+    </div>
+    <div id="article">
+      <div class="placeholder">
+        <h2>Pick an entry</h2>
+        <p>Search the corpus or browse a 五十音 bucket.</p>
+      </div>
+    </div>
+  </article>
+</main>
+
+<div id="dropper" class="dropper" hidden>
+  <div class="card">
+    <h2>Open the corpus</h2>
+    <div id="dropmessage"></div>
+    <p class="pick">
+      <input id="fileinput" type="file" accept=".db,application/vnd.sqlite3,application/octet-stream">
+    </p>
+    <details>
+      <summary>Why do I have to pick the file?</summary>
+      <p>Browsers refuse <code>fetch()</code> from a <code>file://</code> page, so the viewer
+      cannot read <code>resources/corpus.db</code> on its own the way it can when the page is
+      served over http. Two ways out:</p>
+      <ul>
+        <li>drop or pick <code>resources/corpus.db</code> above — it is read locally, nothing
+        is uploaded anywhere; or</li>
+        <li>start the browser with file access enabled,
+        <code>scripts/open-viewer.command</code>, which makes <code>resources/</code> load
+        automatically in Chrome, Edge or Brave.</li>
+      </ul>
+      <p>The pictures are always read straight from <code>resources/media/</code>, so media
+      shows up either way.</p>
+    </details>
+  </div>
+</div>
+
+<script src="vendor/sqlite3.wasm.b64.js"></script>
+<script src="vendor/sqlite3.js"></script>
+<script src="app/corpus.js"></script>
+<script src="app/ui.js"></script>
+<script src="app/main.js"></script>
+</body>
+</html>

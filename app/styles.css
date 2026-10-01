@@ -1,0 +1,282 @@
+/* decarta-web viewer. Hand-written: the page has to render with no build step, no
+ * webfont and no network, so the type is whatever the system has and the layout is one
+ * CSS grid. Japanese is the target case, so line-height is generous and nothing relies
+ * on spaces between words. */
+
+:root {
+  --bg: #f7f7f5;
+  --pane: #ffffff;
+  --ink: #1c1c1e;
+  --muted: #6b6b70;
+  --faint: #9a9aa0;
+  --line: #e2e2df;
+  --accent: #8c2f1f;
+  --accent-soft: #f6ece9;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .06);
+  --sans: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Hiragino Sans",
+          "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, sans-serif;
+  --serif: "Hiragino Mincho ProN", "Yu Mincho", "Times New Roman", serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #16161a;
+    --pane: #1e1e22;
+    --ink: #ececee;
+    --muted: #a2a2a8;
+    --faint: #7c7c84;
+    --line: #2e2e34;
+    --accent: #e0a08f;
+    --accent-soft: #33231f;
+    --shadow: none;
+  }
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 14px/1.5 var(--sans);
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+button { font: inherit; color: inherit; }
+
+/* ---- top bar ------------------------------------------------------------ */
+
+#topbar {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 10px 16px;
+  background: var(--pane);
+  border-bottom: 1px solid var(--line);
+  flex: 0 0 auto;
+}
+
+.brand { display: flex; align-items: baseline; gap: 10px; white-space: nowrap; }
+.brand .mark { font: 600 19px/1 var(--sans); letter-spacing: -.02em; }
+.brand .mark span { color: var(--accent); }
+.brand .tag { font-size: 11px; color: var(--faint); }
+
+.searchwrap { flex: 1 1 auto; display: flex; align-items: center; gap: 10px; min-width: 0; }
+
+#search {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 7px 11px;
+  font: 14px var(--sans);
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+}
+#search:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+#search:disabled { opacity: .5; }
+.searchstate { font-size: 11px; color: var(--faint); white-space: nowrap; min-width: 4ch; }
+
+.corpus { display: flex; align-items: center; gap: 12px; }
+.stats { font-size: 11px; color: var(--muted); white-space: nowrap; cursor: help; }
+
+.ghost {
+  padding: 5px 10px;
+  font-size: 12px;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.ghost:hover:not(:disabled) { background: var(--accent-soft); border-color: var(--accent); }
+.ghost:disabled { opacity: .4; cursor: default; }
+
+/* ---- banner ------------------------------------------------------------- */
+
+.banner {
+  padding: 8px 16px;
+  font-size: 12px;
+  color: var(--muted);
+  background: var(--accent-soft);
+  border-bottom: 1px solid var(--line);
+}
+.banner.warn { color: var(--ink); background: #fbe9e4; }
+@media (prefers-color-scheme: dark) { .banner.warn { background: #3a2420; } }
+
+/* ---- layout ------------------------------------------------------------- */
+
+#layout {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: 200px minmax(260px, 340px) minmax(0, 1fr);
+  min-height: 0;
+}
+
+#layout[aria-busy="true"] { opacity: .6; }
+
+#sidebar, #listpane, #reader { min-height: 0; overflow: auto; }
+#sidebar { background: var(--pane); border-right: 1px solid var(--line); padding-bottom: 20px; }
+#listpane { border-right: 1px solid var(--line); }
+#reader { background: var(--pane); position: relative; }
+
+#sidebar h2 {
+  margin: 14px 14px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+#categories { list-style: none; margin: 0; padding: 0; }
+
+.cat {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 14px;
+  font-size: 13px;
+  text-align: left;
+  background: none;
+  border: 0;
+  border-left: 2px solid transparent;
+  cursor: pointer;
+}
+.cat:hover { background: var(--bg); }
+.cat.selected { background: var(--accent-soft); border-left-color: var(--accent); font-weight: 600; }
+.catcount { font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
+
+.listsummary {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 9px 14px;
+  font-size: 11px;
+  color: var(--muted);
+  background: var(--pane);
+  border-bottom: 1px solid var(--line);
+}
+
+.entries { display: flex; flex-direction: column; }
+
+.row {
+  display: block;
+  width: 100%;
+  padding: 8px 14px;
+  text-align: left;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+}
+.row:hover { background: var(--bg); }
+.row.selected { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
+.rowtitle { font-size: 14px; font-weight: 600; line-height: 1.35; }
+.rowmeta, .rowsnippet { margin-top: 2px; font-size: 11px; color: var(--muted); }
+.rowsnippet { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+.listfoot { padding: 10px 14px; font-size: 11px; color: var(--faint); }
+.foot:empty { display: none; }
+
+/* ---- reader ------------------------------------------------------------- */
+
+.readerbar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 8px 14px;
+  background: var(--pane);
+  border-bottom: 1px solid var(--line);
+}
+
+.articleinner {
+  max-width: 46em;
+  padding: 24px 32px 64px;
+}
+
+.articlehead h1 { margin: 0; font: 600 28px/1.3 var(--sans); }
+.articlehead .reading { margin: 6px 0 0; font-size: 15px; color: var(--muted); }
+.articlehead .provenance { margin: 6px 0 0; font-size: 11px; color: var(--faint); word-break: break-all; }
+
+.articlebody { margin-top: 22px; }
+/* Japanese has no space-delimited words to reflow: paragraph spacing is the only cue. */
+.articlebody p { margin: 0 0 15px; font-size: 15px; line-height: 1.95; }
+
+.gallery { margin: 22px 0; }
+.gallery h2, .relations h2 {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.gallery figure { margin: 0 0 16px; }
+.picture {
+  display: block;
+  max-width: min(100%, 520px);
+  max-height: 420px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+}
+.gallery figcaption { margin-top: 5px; font-size: 12px; color: var(--muted); max-width: 520px; }
+.missing { margin: 0 0 16px; font-size: 12px; color: var(--faint); }
+
+.relations { margin: 22px 0 0; padding-top: 16px; border-top: 1px solid var(--line); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  padding: 4px 9px;
+  font-size: 12px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  cursor: pointer;
+}
+.chip:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-soft); }
+.chip:disabled { opacity: .45; cursor: default; }
+
+.placeholder { padding: 40px 32px; color: var(--muted); }
+.placeholder h2 { margin: 0 0 6px; font-size: 16px; color: var(--ink); }
+.placeholder p { margin: 0; }
+
+/* ---- open panel --------------------------------------------------------- */
+
+.dropper {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(20, 20, 22, .55);
+}
+.dropper .card {
+  max-width: 40em;
+  padding: 22px 26px;
+  background: var(--pane);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, .25);
+}
+.dropper h2 { margin: 0 0 10px; font-size: 17px; }
+.dropper p { margin: 0 0 10px; font-size: 13px; color: var(--muted); }
+.dropper ul { margin: 0 0 10px; padding-left: 20px; font-size: 13px; color: var(--muted); }
+.dropper li { margin: 4px 0; }
+.dropper code { font-size: 12px; background: var(--bg); padding: 1px 4px; border-radius: 4px; }
+.dropper details { margin-top: 12px; font-size: 12px; }
+.dropper summary { cursor: pointer; color: var(--muted); }
+.dropper .pick input { font-size: 12px; }
+
+@media (max-width: 900px) {
+  #layout { grid-template-columns: 150px minmax(200px, 260px) minmax(0, 1fr); }
+  .articleinner { padding: 18px 20px 48px; }
+}
